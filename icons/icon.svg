@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1b1d23"/><stop offset="1" stop-color="#0b0c0f"/></linearGradient>
+  <linearGradient id="edge" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff" stop-opacity=".16"/><stop offset=".4" stop-color="#ffffff" stop-opacity="0"/></linearGradient>
+  <linearGradient id="ink" x1="290" y1="650" x2="760" y2="395" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#5b9bf0"/><stop offset=".55" stop-color="#8f86f2"/><stop offset="1" stop-color="#e879f9"/></linearGradient>
+  <radialGradient id="glow" cx="560" cy="520" r="420" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#7f8cf5" stop-opacity=".30"/><stop offset="1" stop-color="#7f8cf5" stop-opacity="0"/></radialGradient>
+  <filter id="blur" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="34"/></filter>
+</defs>
+<rect x="0" y="0" width="1024" height="1024" rx="232" fill="url(#bg)"/><circle cx="560" cy="520" r="420" fill="url(#glow)"/><rect x="2" y="2" width="1020" height="1020" rx="230" fill="none" stroke="url(#edge)" stroke-width="4"/>
+<g transform="translate(0.0 0.0) scale(1.0)"><g filter="url(#blur)" opacity=".75"><path d="M290 650 L455 485 L565 590 L760 395" fill="none" stroke="url(#ink)" stroke-width="86" stroke-linecap="round" stroke-linejoin="round"/><circle cx="760" cy="262" r="56" fill="#f3f2ef"/></g><path d="M290 650 L455 485 L565 590 L760 395" fill="none" stroke="url(#ink)" stroke-width="86" stroke-linecap="round" stroke-linejoin="round"/><circle cx="760" cy="262" r="56" fill="#f3f2ef"/></g>
+</svg>
