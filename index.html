@@ -304,7 +304,7 @@ nav a.on{background:var(--ink);color:var(--bg)}
       <div>
         <div class="card">
           <h2>Daily minimum</h2>
-          <div style="display:flex;align-items:baseline;gap:10px"><span class="big2" id="streak">0</span><span class="muted">day streak · +25 XP when complete</span></div>
+          <div style="display:flex;align-items:baseline;gap:10px"><span class="big2" id="streak">0</span><span class="muted">day streak</span></div>
           <div class="dots" id="dots" aria-hidden="true"></div>
           <div id="mini"></div>
         </div>
@@ -320,7 +320,6 @@ nav a.on{background:var(--ink);color:var(--bg)}
       <div class="card">
         <div class="calhead"><button class="ghost sm" data-act="calprev" aria-label="Previous month">‹</button><div class="m" id="calTitle"></div><button class="ghost sm" data-act="calnext" aria-label="Next month">›</button></div>
         <div class="cal" id="cal"></div>
-        <div class="legend" style="margin-top:12px">Green fill shows how much of the day you completed. Dots are the areas planned. A pink flag marks a goal deadline.</div>
         <div style="margin-top:10px"><button class="ghost sm" data-act="caltoday">Go to today</button></div>
       </div>
       <div class="card" id="dayPanel"></div>
@@ -340,15 +339,13 @@ nav a.on{background:var(--ink);color:var(--bg)}
     <div class="seg" id="seg" role="group" aria-label="Stats range"></div>
     <div class="kpis" id="kpis"></div>
     <div class="grid">
-      <div class="card"><h2 id="barsTitle">Hours by area</h2><div class="muted small" style="margin:-6px 0 10px">Solid bar is done, faint bar is planned up to today</div><div class="bars" id="bars"></div></div>
+      <div class="card"><h2 id="barsTitle">Hours by area</h2><div class="bars" id="bars"></div></div>
       <div class="card"><h2>Hours per week</h2><div class="muted small" style="margin:-6px 0 0">Last 12 weeks</div><div class="trend" id="trend"></div></div>
     </div>
     <div class="card"><h2>Last 12 months</h2><div class="heat" id="heat"></div>
       <div class="legend">Less <i style="background:var(--line)"></i><i style="background:#5dc48a44"></i><i style="background:#5dc48a88"></i><i style="background:#5dc48acc"></i><i style="background:#5dc48a"></i> More</div></div>
 
     <div class="card"><h2>Badges</h2><div class="bgrid" id="badges"></div></div>
-    <div class="card"><h2>How to earn XP</h2>
-      <ul class="muted" style="margin:0;padding-left:18px;font-size:14px"><li>Complete a block (timer reaches 00:00): <b>+10 XP</b></li><li>Every focus minute on the timer: <b>+1 XP</b></li><li>Complete the daily minimum: <b>+25 XP</b></li><li>Each day of your streak adds <b>+5 XP</b> to that day</li><li>Tick a goal milestone: <b>+15 XP</b> · Finish a goal: <b>+100 XP</b></li></ul></div>
   </section>
 
   <section class="view" id="v-plan"><div id="planWrap"></div></section>
@@ -390,6 +387,8 @@ function normalise(s) {
   for (const k of ['templates', 'periods', 'books', 'minimum']) if (!Array.isArray(out[k]) || !out[k].length) out[k] = d[k];
   out.days = s.days && typeof s.days === 'object' ? s.days : {};
   out.cats = { ...d.cats, ...(s.cats || {}) };
+  (out.periods || []).forEach(p => { if (p.focus && /What did I do today/.test(p.focus.refl || '')) p.focus.refl = ''; });
+  (out.goals || []).forEach(g => { if (g.status === 'archived') g.status = 'auto'; });
   out.minLinks = Array.isArray(s.minLinks) ? s.minLinks : (out.minimum.length === d.minimum.length ? d.minLinks : out.minimum.map(() => null));
   out.strictFrom = s.strictFrom || iso(new Date());
   if (!Array.isArray(s.goals)) {
@@ -723,7 +722,7 @@ function renderHero(now, light) {
     show = { a: timer.a, t: timer.t, key: timer.key }; mode = 'timer';
     const e = tElapsed(), total = timer.len * 60;
     if (e >= total && timer.running) { finishTimer(true); return; }
-    frac = e / total; big = fmtMS(total - e); cap = timer.running ? 'focus time left' : 'paused'; meta = `${timer.len} min session · completes the block only when it reaches 00:00`;
+    frac = e / total; big = fmtMS(total - e); cap = timer.running ? 'focus time left' : 'paused'; meta = `${timer.len} min session`;
     document.title = `${big} · ${timer.t}`;
   } else {
     document.title = 'Ascend';
@@ -752,9 +751,7 @@ function renderHero(now, light) {
     : `<button class="go" data-act="start" data-d="${di}" data-k="${esc(show.key)}">${rem < show.len ? `Continue · ${rem} min left` : `Start focus · ${rem} min`}</button>${rem > 25 ? `<button class="ghost" data-act="sprint" data-d="${di}" data-k="${esc(show.key)}">25-min sprint</button>` : ''}`;
   el.innerHTML = `${ringSVG(frac, big, cap)}<div><div class="tag">${mode === 'timer' ? 'Focusing' : mode === 'live' ? 'Now' : mode === 'done' ? 'Completed' : 'Up next'} · ${esc(A.name)}</div>
     <div class="htitle">${esc(show.t)}</div><div class="hmeta">${esc(meta)}</div>
-    <div class="motto">${esc(mode === 'done' ? DONE_LINES[hashStr(show.key + di) % DONE_LINES.length] : lineFor(show.a, di + show.key))}</div>
-    ${focusFor(show.a, di) ? `<div class="hfocus">${esc(focusFor(show.a, di))}</div>` : ''}<div class="btns">${btns}</div>
-    ${A.prompt ? `<div class="prompt"><q>${esc(A.prompt)}</q><button class="ghost sm" data-act="copy" data-p="${esc(A.prompt)}">Copy</button></div>` : ''}</div>`;
+    ${focusFor(show.a, di) ? `<div class="hfocus">${esc(focusFor(show.a, di))}</div>` : ''}<div class="btns">${btns}</div></div>`;
 }
 function renderTop(now) {
   const h = now.getHours(), dv = derive(), xp = dv.xp, L = levelOf(xp), lo = lvlNeed(L), hi = lvlNeed(L + 1), p = periodFor(iso(now));
@@ -769,10 +766,10 @@ function rowHTML(it, di, now, opts = {}) {
   const D = peek(di), nm = now.getHours() * 60 + now.getMinutes(), isToday = di === iso(now);
   const past = isToday && mins(it.e) <= nm, live = isToday && mins(it.s) <= nm && nm < mins(it.e), dn = blockDone(di, it), fm = focusedMin(di, it);
   const logged = fm ? ` · ${fm}/${it.len} min focused` : '', C = 2 * Math.PI * 15;
-  const desc = (focusFor(it.a, di) || area(it.a).name) + logged;
+  const desc = logged ? logged.slice(3) : '';
   return `<li class="row${past ? ' past' : ''}${live ? ' live' : ''}${dn ? ' done' : ''}" style="--c:${col(it.a)}">
     <div class="t">${it.s}<small>${it.len} min</small></div>
-    <div class="it"><div><b>${esc(it.t)}</b><span>${esc(desc)}</span></div></div>
+    <div class="it"><div><b>${esc(it.t)}</b>${desc ? `<span>${esc(desc)}</span>` : ''}</div></div>
     <div class="acts">${opts.play && !timer && !dn ? `<button class="icon play" data-act="start" data-d="${di}" data-k="${esc(it.key)}" aria-label="${fm ? 'Continue' : 'Start'} focus: ${esc(it.t)}">${SVG.play}</button>` : ''}
     ${opts.skip ? `<button class="icon" data-act="skip" data-d="${di}" data-k="${esc(it.key)}" aria-label="Remove from this day: ${esc(it.t)}">${SVG.x}</button>` : ''}
     <div class="bp${dn ? ' done' : ''}" role="img" aria-label="${dn ? 'Completed' : `${fm} of ${it.len} minutes focused`}">${dn ? '<i></i>' : `<svg viewBox="0 0 36 36"><circle class="bt" cx="18" cy="18" r="15" fill="none" stroke-width="3.5"/><circle class="bpp" cx="18" cy="18" r="15" fill="none" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${(C * (1 - fm / (it.len || 1))).toFixed(1)}"/></svg><span>${fm ? Math.round(fm / it.len * 100) + '%' : ''}</span>`}</div></div></li>`;
@@ -789,8 +786,7 @@ function renderMini(now) {
     if (L && L.a && !areaPlanned(di, L.a)) return `<div class="mini" style="opacity:.55"><span class="auto"><span class="bp done" style="width:30px;height:30px;--c:#5d6066;box-shadow:none"><i></i></span></span><label>${esc(t)}</label><span class="minp">not planned today</span></div>`;
     if (L && L.a) { const have = Math.min(+L.m, af[L.a] || 0), ok = have >= +L.m;
       return `<div class="mini" style="--c:#f3a25a"><span class="auto"><span class="bp${ok ? ' done' : ''}" style="width:30px;height:30px">${ok ? '<i></i>' : `<svg viewBox="0 0 36 36"><circle class="bt" cx="18" cy="18" r="15" fill="none" stroke-width="4"/><circle class="bpp" cx="18" cy="18" r="15" fill="none" stroke-width="4" stroke-linecap="round" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${(C * (1 - have / L.m)).toFixed(1)}"/></svg>`}</span></span><label>${esc(t)}</label><span class="minp">${ok ? 'done' : `${have}/${L.m} min`}</span></div>`; }
-    return `<div class="mini"><label class="chk" style="--c:#f3a25a"><input type="checkbox" id="mn${i}" data-min="${i}" data-d="${di}" ${m[i] ? 'checked' : ''}><span></span></label><label for="mn${i}">${esc(t)}</label></div>`; }).join('') +
-    '<div class="muted small" style="margin-top:8px">Timed items fill in automatically from the focus timer.</div>';
+    return `<div class="mini"><label class="chk" style="--c:#f3a25a"><input type="checkbox" id="mn${i}" data-min="${i}" data-d="${di}" ${m[i] ? 'checked' : ''}><span></span></label><label for="mn${i}">${esc(t)}</label></div>`; }).join('');
   $('streak').textContent = dv.curStreak;
   $('dots').innerHTML = Array.from({ length: 14 }, (_, i) => `<i class="${minDone(iso(addDays(now, i - 13))) ? 'on' : ''}"></i>`).join('');
 }
@@ -808,7 +804,7 @@ function renderSide(now) {
   const b = books.find(b => di >= b.start && di <= b.end) || books.find(b => di < b.start);
   if (b) {
     const s = parse(b.start), e = parse(b.end), tot = Math.round((e - s) / 864e5) + 1, dd = Math.min(tot, Math.max(0, Math.round((parse(di) - s) / 864e5) + 1));
-    $('bookCard').innerHTML = `<h2>${dd ? 'Current book' : 'Next book'}</h2><div class="bk">${esc(b.title)}</div><div class="muted small">${esc(b.author)} · ${fmtD(b.start)} – ${fmtD(b.end)}</div><div class="track" style="--c:#5dc48a"><i style="width:${(dd / tot * 100).toFixed(0)}%"></i></div><div class="muted small">${dd ? `Day ${dd} of ${tot} · 1-page summary + 10 new words` : `Starts ${fmtD(b.start)}`}</div>`;
+    $('bookCard').innerHTML = `<h2>${dd ? 'Current book' : 'Next book'}</h2><div class="bk">${esc(b.title)}</div><div class="muted small">${esc(b.author)} · ${fmtD(b.start)} – ${fmtD(b.end)}</div><div class="track" style="--c:#5dc48a"><i style="width:${(dd / tot * 100).toFixed(0)}%"></i></div><div class="muted small">${dd ? `Day ${dd} of ${tot}` : `Starts ${fmtD(b.start)}`}</div>`;
   } else $('bookCard').innerHTML = `<h2>Reading</h2><div class="muted">No book planned. Add your next one in Plan.</div><button class="ghost sm" style="margin-top:10px" data-go="plan">Add a book</button>`;
   const p = periodFor(di);
   if (p) {
@@ -846,13 +842,13 @@ function renderDayPanel(now) {
     <div class="muted small" style="margin:-6px 0 10px">${p ? esc(p.name) : 'No period'}${book ? ` · Reading ${esc(book.title)}` : ''}${st && st.plan ? ` · ${its.filter(it => blockDone(di, it)).length}/${its.length} blocks complete · ${(st.done / 60).toFixed(1)} h focused` : ''}${minDone(di) ? ' · minimum met' : ''}</div>
     <ul class="list">${its.length ? its.map(it => rowHTML(it, di, now, { skip: true })).join('') : '<li class="muted" style="padding:10px 0">Nothing planned.</li>'}</ul>
     ${(D.skip || []).length ? `<div class="note">${D.skip.length} block(s) removed from this day. <button class="ghost sm" data-act="unskip" data-d="${di}">Restore</button></div>` : ''}
-    <details><summary>Add a one-off block (e.g. a Myer shift)</summary>
+    <details><summary>Add a block to this day</summary>
       <div class="formrow"><div><label class="f" for="adS">Start</label><input type="time" id="adS" value="12:00"></div><div><label class="f" for="adE">End</label><input type="time" id="adE" value="13:00"></div>
       <div><label class="f" for="adA">Area</label><select id="adA">${areaOpts}</select></div></div>
       <div class="formrow"><div style="grid-column:1/-1"><label class="f" for="adT">Title</label><input id="adT" placeholder="e.g. Myer shift or Extra Java"></div></div>
       <button class="sm" style="margin-top:10px" data-act="addOne" data-d="${di}">Add to this day</button></details>
     ${S.goals.filter(g => g.target === di && g.status !== 'archived').map(g => `<div class="banner" style="margin-top:12px;background:color-mix(in srgb,${cat(g.cat).color} 14%,var(--panel));border-color:${cat(g.cat).color}55;color:var(--ink)">Goal deadline: <b>${esc(g.title)}</b> · ${Math.round(gProg(g) * 100)}% <a href="#goals" data-opengoal="${g.id}" style="color:inherit">Open</a></div>`).join('')}
-    <h3>Notes &amp; reflection</h3><textarea id="dayNote" data-d="${di}" placeholder="What did you do? What did you learn? One task for tomorrow?">${esc(D.note || '')}</textarea>`;
+    <h3>Notes</h3><textarea id="dayNote" data-d="${di}" placeholder="Notes for this day">${esc(D.note || '')}</textarea>`;
 }
 
 /* ================= renders: goals ================= */
@@ -863,20 +859,19 @@ function renderGoals(now) {
   const done = live.filter(g => g.status === 'done').length, act = live.filter(g => ['now', 'over'].includes(gState(g, t))).length;
   const ms = live.flatMap(g => g.milestones || []), msd = ms.filter(m => m.done).length, frac = ms.length ? msd / ms.length : 0, C = 2 * Math.PI * 52;
   $('gsum').innerHTML = `<div class="gring"><svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" fill="none" stroke="var(--line)" stroke-width="10"/><circle cx="60" cy="60" r="52" fill="none" stroke="url(#gg)" stroke-width="10" stroke-linecap="round" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${(C * (1 - Math.max(.004, frac))).toFixed(1)}"/><defs><linearGradient id="gg"><stop offset="0" stop-color="#5b9bf0"/><stop offset="1" stop-color="#e879f9"/></linearGradient></defs></svg><div class="mid"><b>${Math.round(frac * 100)}%</b><span>milestones</span></div></div>
-    <div><div class="ttl" style="font-size:clamp(24px,3.4vw,32px);font-weight:800;line-height:1.1">${act} goals in focus</div><div class="muted">${done} done · ${live.length} total · ${msd} of ${ms.length} milestones ticked</div><div class="muted small hint" style="margin-top:6px">Tap a goal to tick milestones, edit dates, or mark it done. Add your own with + New goal.</div></div>`;
+    <div><div class="ttl" style="font-size:clamp(24px,3.4vw,32px);font-weight:800;line-height:1.1">${act} goals in focus</div><div class="muted">${done} done · ${live.length} total · ${msd} of ${ms.length} milestones ticked</div></div>`;
   $('gphases').innerHTML = PH.map(([n, a, b], i) => { const c = live.filter(g => g.target >= a && g.target <= b).length, cur = t >= a && t <= b; return `<button data-gph="${i}" class="${cur ? 'cur' : ''}" aria-pressed="${gFilter === 'ph' + i}"><b>${n}</b><span>${i < 3 ? fmtD(a) + ' – ' + fmtD(b) : '2028 onwards'} · ${c} goals</span></button>`; }).join('');
-  $('gseg').innerHTML = [['now', 'In focus'], ['next', 'Coming up'], ['done', 'Done'], ['all', 'All'], ['archived', 'Archived']].map(([k, l]) => `<button data-gf="${k}" aria-pressed="${gFilter === k}">${l}</button>`).join('');
+  $('gseg').innerHTML = [['now', 'In focus'], ['next', 'Coming up'], ['done', 'Done'], ['all', 'All']].map(([k, l]) => `<button data-gf="${k}" aria-pressed="${gFilter === k}">${l}</button>`).join('');
   $('gcat').innerHTML = `<option value="all">All categories</option>` + Object.entries(S.cats).map(([k, c]) => `<option value="${k}"${gCat === k ? ' selected' : ''}>${esc(c.name)}</option>`).join('');
   let list = S.goals.filter(g => gCat === 'all' || g.cat === gCat);
   const stt = g => gState(g, t);
   if (gFilter === 'now') list = list.filter(g => ['now', 'over'].includes(stt(g)));
   else if (gFilter === 'next') list = list.filter(g => ['next', 'later', 'paused'].includes(stt(g)));
   else if (gFilter === 'done') list = list.filter(g => stt(g) === 'done');
-  else if (gFilter === 'archived') list = list.filter(g => stt(g) === 'archived');
-  else if (gFilter.startsWith('ph')) { const [, a, b] = PH[+gFilter.slice(2)]; list = list.filter(g => g.target >= a && g.target <= b && stt(g) !== 'archived'); }
+    else if (gFilter.startsWith('ph')) { const [, a, b] = PH[+gFilter.slice(2)]; list = list.filter(g => g.target >= a && g.target <= b && stt(g) !== 'archived'); }
   else list = list.filter(g => stt(g) !== 'archived');
   list.sort((a, b) => a.target < b.target ? -1 : a.target > b.target ? 1 : (a.start < b.start ? -1 : 1));
-  if (!list.length) { $('glist').innerHTML = `<div class="card muted">${gFilter === 'done' ? 'No finished goals yet. Your first one is closer than you think.' : gFilter === 'archived' ? 'Nothing archived.' : 'No goals here. Try another filter or add a new goal.'}</div>`; return; }
+  if (!list.length) { $('glist').innerHTML = `<div class="card muted">${gFilter === 'done' ? 'No finished goals yet. Your first one is closer than you think.' : 'No goals here. Try another filter or add a new goal.'}</div>`; return; }
   let html = '', lastHead = '';
   for (const g of list) {
     const head = g.target >= '2028-01-01' ? 'Long term' : 'Due ' + parse(g.target).toLocaleDateString('en-AU', { month: 'long', year: 'numeric' });
@@ -902,11 +897,9 @@ function goalCard(g, t) {
         <div><label class="f">Category</label><select data-gf-edit="${g.id}" data-f="cat">${catOpts}</select></div>
         <div><label class="f">Start</label><input type="date" value="${g.start}" data-gf-edit="${g.id}" data-f="start"></div>
         <div><label class="f">Target</label><input type="date" value="${g.target}" data-gf-edit="${g.id}" data-f="target"></div>
-        <div style="grid-column:1/-1"><label class="f">Why it matters / notes</label><textarea data-gf-edit="${g.id}" data-f="note" placeholder="Why this goal matters to you">${esc(g.note || '')}</textarea></div>
       </div>
       <div class="btns">${g.status === 'done' ? `<button class="ghost sm" data-act="gStatus" data-g="${g.id}" data-v="auto">Reopen</button>` : `<button class="sm" data-act="gStatus" data-g="${g.id}" data-v="done">Mark goal done</button>`}
         ${g.status === 'paused' ? `<button class="ghost sm" data-act="gStatus" data-g="${g.id}" data-v="auto">Resume</button>` : g.status !== 'done' ? `<button class="ghost sm" data-act="gStatus" data-g="${g.id}" data-v="paused">Pause</button>` : ''}
-        ${g.status === 'archived' ? `<button class="ghost sm" data-act="gStatus" data-g="${g.id}" data-v="auto">Unarchive</button>` : `<button class="ghost sm" data-act="gStatus" data-g="${g.id}" data-v="archived">Archive</button>`}
         <button class="danger sm" data-act="delGoal" data-g="${g.id}">Delete</button></div>
     </div>` : ''}</div>`;
 }
@@ -990,7 +983,7 @@ function renderPlan(now) {
   const futureP = [...S.periods].sort((a, b) => a.start < b.start ? -1 : 1).find(p => p.start > today && (!curP || pre(p.name) !== pre(curP.name)) && (parse(p.start) - parse(today)) / 864e5 <= 28);
   const notifState = !('Notification' in window) ? 'This browser has no notifications.' : Notification.permission === 'granted' ? (S.settings.notify ? 'On' : 'Allowed but switched off') : Notification.permission === 'denied' ? 'Blocked in browser settings' : 'Not yet allowed';
   $('planWrap').innerHTML = `
-  ${futureP ? `<div class="banner"><b>${esc(futureP.name)}</b> starts ${fmtD(futureP.start, { weekday: 'short', day: 'numeric', month: 'short' })}. ${S.templates.some(t => t.from === futureP.start) ? 'Its weekly plan is ready: pick it under Plan version and change the Uni blocks to match your real timetable.' : 'When you know your timetable, make a new weekly plan from that date so your past history stays as it was.'}</div>` : ''}
+  ${futureP ? `<div class="banner"><b>${esc(futureP.name)}</b> starts ${fmtD(futureP.start, { weekday: 'short', day: 'numeric', month: 'short' })}. ${S.templates.some(t => t.from === futureP.start) ? 'Update its Uni blocks with your timetable.' : 'Create a new plan version for it.'}</div>` : ''}
   <div class="grid">
     <div class="card">
       <h2>Weekly plan</h2>
@@ -1007,26 +1000,22 @@ function renderPlan(now) {
         <div class="formrow"><div style="grid-column:1/-1"><label class="f" for="nT">Title</label><input id="nT" placeholder="e.g. Python practice"></div></div>
         <button class="sm" style="margin-top:10px" data-act="addB">Add block</button></details>
       <details><summary>Start a new plan version from a date</summary>
-        <p class="note">Use this when your week changes, for example when Semester 1 starts. Days before that date keep their old plan, so your history and stats stay correct.</p>
         <div class="formrow"><div><label class="f" for="nvD">Active from</label><input type="date" id="nvD" value="${futureP ? futureP.start : today}"></div><div><label class="f" for="nvC">Start with</label><select id="nvC"><option value="copy">A copy of this plan</option><option value="empty">An empty week</option></select></div></div>
         <button class="sm" style="margin-top:10px" data-act="newTpl">Create plan version</button>
         ${T && S.templates.length > 1 ? `<button class="danger sm" style="margin-top:10px" data-act="delTpl">Delete this version</button>` : ''}</details>
-      <p class="note">Editing a plan that started before today saves your changes as a new version from today, so past days stay exactly as they were.</p>
     </div>
     <div>
       <div class="card"><h2>Reminders</h2>
-        <p class="muted small" style="margin-top:-6px">Status: <b>${notifState}</b>. Each block gets a motivating reminder: a pop-up card when the app is on screen, and a system notification with a Start focus button when it's in the background. For reminders when the app is fully closed, add the calendar file to Google Calendar too.</p>
+        <p class="muted small" style="margin-top:-6px">${notifState}</p>
         <div class="formrow"><div><label class="f" for="lead">Remind me before each block</label><select id="lead">${[0, 2, 5, 10, 15].map(v => `<option value="${v}"${+S.settings.lead === v ? ' selected' : ''}>${v ? v + ' minutes' : 'At the start'}</option>`).join('')}</select></div></div>
         <div class="btns"><button class="sm" data-act="notifOn">${S.settings.notify && ('Notification' in window) && Notification.permission === 'granted' ? 'Reminders on' : 'Turn on reminders'}</button>${S.settings.notify ? '<button class="ghost sm" data-act="notifOff">Turn off</button>' : ''}<button class="ghost sm" data-act="notifTest">Send a test</button></div></div>
       <div class="card"><h2>Calendar &amp; backup</h2>
         <div class="formrow" style="margin-top:0"><div><label class="f" for="icsW">Export reminders to your calendar</label><select id="icsW"><option value="4">Next 4 weeks</option><option value="8" selected>Next 8 weeks</option><option value="13">Next 3 months</option><option value="26">Next 6 months</option></select></div></div>
         <div class="btns"><button class="sm" data-act="ics">Download calendar file</button></div>
-        <p class="note">Import it into Google Calendar and it appears on your Mac and Android with alerts. Do this again whenever you change your plan.</p>
-        <h3>Backup</h3><div class="btns" style="margin-top:0"><button class="ghost sm" data-act="export">Export backup</button><button class="ghost sm" data-act="import">Import backup</button></div>
-        <p class="note">Your history is saved on this device. Export a backup every few weeks, and import it to move to a new phone or computer.</p></div>
+        <h3>Backup</h3><div class="btns" style="margin-top:0"><button class="ghost sm" data-act="export">Export backup</button><button class="ghost sm" data-act="import">Import backup</button></div></div>
     </div>
   </div>
-  <div class="card"><h2>Goal periods</h2><p class="muted small" style="margin-top:-6px">Phases and blocks that run across the year. Each one sets the focus text shown on your blocks.</p>
+  <div class="card"><h2>Goal periods</h2>
     <div class="tbl">${[...S.periods].map((p, i) => ({ p, i })).sort((a, b) => a.p.start < b.p.start ? -1 : 1).map(({ p, i }) => `
       <div class="tr"><input value="${esc(p.name)}" data-per="${i}" data-f="name" aria-label="Period name"><input type="date" value="${p.start}" data-per="${i}" data-f="start" aria-label="Start"><input type="date" value="${p.end}" data-per="${i}" data-f="end" aria-label="End"><button class="icon" data-act="delPer" data-i="${i}" aria-label="Delete ${esc(p.name)}">${SVG.x}</button></div>
       <details><summary>Focus for ${esc(p.name)}</summary>${Object.entries(S.areas).map(([k, a]) => `<div style="margin-top:8px"><label class="f">${esc(a.name)}</label><input value="${esc((p.focus || {})[k] || '')}" data-per="${i}" data-focus="${k}"></div>`).join('')}</details>`).join('')}</div>
@@ -1036,11 +1025,11 @@ function renderPlan(now) {
       <div class="tbl">${S.books.map((b, i) => ({ b, i })).sort((a, b) => a.b.start < b.b.start ? -1 : 1).map(({ b, i }) => `<div class="tr"><input value="${esc(b.title)}" data-book="${i}" data-f="title" aria-label="Title"><input type="date" value="${b.start}" data-book="${i}" data-f="start" aria-label="Start"><input type="date" value="${b.end}" data-book="${i}" data-f="end" aria-label="Finish"><button class="icon" data-act="delBook" data-i="${i}" aria-label="Delete ${esc(b.title)}">${SVG.x}</button></div>`).join('')}</div>
       <button class="ghost sm" style="margin-top:12px" data-act="addBook">Add the next book</button></div>
     <div class="card"><h2>Areas</h2>
-      <div class="tbl">${Object.entries(S.areas).map(([k, a]) => `<div class="tr" style="grid-template-columns:52px minmax(0,1fr) auto"><input type="color" value="${a.color}" data-area="${k}" data-f="color" aria-label="Colour for ${esc(a.name)}"><input value="${esc(a.name)}" data-area="${k}" data-f="name" aria-label="Area name"><span></span></div><input value="${esc(a.prompt || '')}" data-area="${k}" data-f="prompt" placeholder="Claude prompt for this area" aria-label="Claude prompt for ${esc(a.name)}">`).join('')}</div>
-      <button class="ghost sm" style="margin-top:12px" data-act="addArea">Add an area (e.g. Python or AI/ML)</button>
+      <div class="tbl">${Object.entries(S.areas).map(([k, a]) => `<div class="tr" style="grid-template-columns:52px minmax(0,1fr) auto"><input type="color" value="${a.color}" data-area="${k}" data-f="color" aria-label="Colour for ${esc(a.name)}"><input value="${esc(a.name)}" data-area="${k}" data-f="name" aria-label="Area name"><span></span></div>`).join('')}</div>
+      <button class="ghost sm" style="margin-top:12px" data-act="addArea">Add an area</button>
       <h3>Goal categories</h3><div class="tbl">${Object.entries(S.cats).map(([k, c]) => `<div class="tr" style="grid-template-columns:52px minmax(0,1fr) auto"><input type="color" value="${c.color}" data-cat="${k}" data-f="color" aria-label="Colour for ${esc(c.name)}"><input value="${esc(c.name)}" data-cat="${k}" data-f="name" aria-label="Category name"><span></span></div>`).join('')}</div>
       <button class="ghost sm" style="margin-top:10px" data-act="addCat">Add a category</button>
-      <h3>Daily minimum</h3><p class="note" style="margin-top:-4px">Link an item to an area and it only counts once the timer has logged that many minutes.</p><div class="tbl">${S.minimum.map((m, i) => { const L = minLink(i) || {}; return `<div class="tr" style="grid-template-columns:minmax(0,1fr) auto"><input value="${esc(m)}" data-minedit="${i}" aria-label="Minimum item ${i + 1}"><button class="icon" data-act="delMin" data-i="${i}" aria-label="Remove">${SVG.x}</button></div>
+      <h3>Daily minimum</h3><div class="tbl">${S.minimum.map((m, i) => { const L = minLink(i) || {}; return `<div class="tr" style="grid-template-columns:minmax(0,1fr) auto"><input value="${esc(m)}" data-minedit="${i}" aria-label="Minimum item ${i + 1}"><button class="icon" data-act="delMin" data-i="${i}" aria-label="Remove">${SVG.x}</button></div>
         <div class="tr" style="grid-template-columns:minmax(0,1fr) 90px;margin-bottom:6px"><select data-minlink="${i}" aria-label="Timer link for item ${i + 1}"><option value="">Tick by hand</option>${Object.entries(S.areas).map(([k, a]) => `<option value="${k}"${L.a === k ? ' selected' : ''}>Timer: ${esc(a.name)}</option>`).join('')}</select><input type="number" min="1" max="240" value="${L.m || 15}" data-minmins="${i}" aria-label="Minutes" ${L.a ? '' : 'disabled'}></div>`; }).join('')}</div>
       <button class="ghost sm" style="margin-top:10px" data-act="addMin">Add an item</button>
       <h3>Your name</h3><input value="${esc(S.settings.name)}" id="nameIn" aria-label="Your name"></div>
@@ -1070,7 +1059,7 @@ function buildICS(weeks) {
       const [sh, sm] = it.s.split(':').map(Number), [eh, em] = it.e.split(':').map(Number);
       const st = new Date(d.getFullYear(), d.getMonth(), d.getDate(), sh, sm), en = new Date(d.getFullYear(), d.getMonth(), d.getDate(), eh, em);
       if (i === 0 && st < now) continue;
-      const A = area(it.a), desc = [focusFor(it.a, di), A.prompt ? `Ask Claude: "${A.prompt}"` : ''].filter(Boolean).join('\n\n');
+      const A = area(it.a), desc = [focusFor(it.a, di), ''].filter(Boolean).join('\n\n');
       L.push('BEGIN:VEVENT', `UID:${di}-${it.s.replace(':', '')}-${it.a}@focus-goals`, `DTSTAMP:${stamp}`, `DTSTART:${z(st)}`, `DTEND:${z(en)}`, `SUMMARY:${icsEsc(A.name + ': ' + it.t)}`, `DESCRIPTION:${icsEsc(desc)}`, 'BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${icsEsc(it.t)}`, `TRIGGER:-PT${it.a === 'refl' ? 0 : lead}M`, 'END:VALARM', 'END:VEVENT');
     }
   }
@@ -1098,7 +1087,7 @@ document.addEventListener('click', async ev => {
     case 'addMs': { const g = S.goals.find(x => x.id === b.dataset.g), inp = $('ms-' + b.dataset.g); if (!g || !inp.value.trim()) { toast('Type a milestone first'); break; } (g.milestones ||= []).push({ t: inp.value.trim(), done: false }); save(); renderGoals(now); const n = $('ms-' + g.id); if (n) n.focus(); break; }
     case 'delMs': { const g = S.goals.find(x => x.id === b.dataset.g); if (!g) break; g.milestones.splice(+b.dataset.i, 1); save(); renderGoals(now); break; }
     case 'gStatus': { const g = S.goals.find(x => x.id === b.dataset.g); if (!g) break; const was = g.status; g.status = b.dataset.v; save(); if (b.dataset.v === 'done' && was !== 'done') { toast('Goal finished · +100 XP'); chime(); } else toast(b.dataset.v === 'archived' ? 'Goal archived' : b.dataset.v === 'paused' ? 'Goal paused' : 'Goal reopened'); renderAll(); break; }
-    case 'delGoal': modal(`<h2>Delete this goal?</h2><p class="muted">${esc((S.goals.find(x => x.id === b.dataset.g) || {}).title)} and its milestones will be removed. Archive keeps it instead.</p><div class="btns" style="justify-content:center"><button class="danger" data-act="delGoalYes" data-g="${b.dataset.g}">Delete</button><button class="ghost" data-act="close">Cancel</button></div>`); break;
+    case 'delGoal': modal(`<h2>Delete this goal?</h2><p class="muted">${esc((S.goals.find(x => x.id === b.dataset.g) || {}).title)} and its milestones will be removed.</p><div class="btns" style="justify-content:center"><button class="danger" data-act="delGoalYes" data-g="${b.dataset.g}">Delete</button><button class="ghost" data-act="close">Cancel</button></div>`); break;
     case 'delGoalYes': S.goals = S.goals.filter(x => x.id !== b.dataset.g); openGoal = null; closeModal(); save(); renderAll(); toast('Goal deleted'); break;
     case 'addCat': { const k = 'c' + Date.now().toString(36); S.cats[k] = { name: 'New category', color: '#7fb3ff' }; save(); renderPlan(now); break; }
     case 'start': startTimer(di, b.dataset.k); break;
