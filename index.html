@@ -259,6 +259,12 @@ summary{cursor:pointer;font-weight:700;font-size:14px}
 @keyframes shrink{to{transform:scaleX(0)}}
 /* glyphs */
 .gl{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+/* sync */
+.addms input{flex:1;min-width:0}.addms button{flex:none;white-space:nowrap}
+@media(max-width:880px){.plangrid>div:last-child{order:-1}}
+.steps{margin:12px 0 4px;padding-left:20px;font-size:14px;color:var(--ink)}.steps li{margin-bottom:6px}.steps a{color:#8fb8ff}
+.syncdot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-left:6px;vertical-align:middle;background:transparent}
+.syncdot.ok{background:var(--ok);box-shadow:0 0 6px var(--ok)}.syncdot.syncing{background:#8fb8ff}.syncdot.error{background:#ff9b8f}
 /* simplified chrome */
 .tbl .tr3{grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto!important}.tbl .tr3>:first-child{grid-column:1/-1}
 .tbl .tr3m{grid-template-columns:minmax(0,1fr) 84px auto!important}.tbl .tr3m>:first-child{grid-column:1/-1}
@@ -306,7 +312,7 @@ nav a.on{background:var(--ink);color:var(--bg)}
     <div><div class="hello" id="hello">Hello</div><div class="date" id="date"></div></div>
     <div class="pills">
       <div class="pill"><div class="v" id="lvTop">Lv 1</div><div><div class="l" id="lvTitle">Starter</div><div class="xpbar"><i id="xpTop" style="width:0"></i></div></div></div>
-      <div class="pill"><div class="v" id="stTop">0</div><div class="l">day<br>streak</div></div>
+      <div class="pill"><div class="v" id="stTop">0</div><div class="l">day<br>streak<span class="syncdot" id="syncDot" title="Sync"></span></div></div>
       <div class="pill clockpill"><div class="v" id="clock">--:--</div><div class="sync" id="sync"><i></i><span>On this device</span></div></div>
     </div>
   </div>
@@ -509,6 +515,9 @@ function areaSums(from, to, onlyPast = true) {
 let dbCol = null, uid = null, dirtyDocs = new Set(), pushTimer = null, chain = Promise.resolve(), lastSent = {};
 function save(changedDay) {
   invalidate();
+  if (!changedDay) S.cfgAt = Date.now();
+  S.dayAt = Date.now();
+  if (typeof cloudQueue === 'function') cloudQueue();
   if (!ls.set(KEY, S)) toast('Storage is full. Export a backup in Plan.');
   if (dbCol) { dirtyDocs.add('config'); if (changedDay) dirtyDocs.add('y' + changedDay.slice(0, 4)); else Object.keys(S.days).forEach(k => dirtyDocs.add('y' + k.slice(0, 4))); schedulePush(); }
 }
@@ -541,6 +550,85 @@ function mergeDays(a, b) {
   return out;
 }
 function setSync(on, text) { const s = $('sync'); s.classList.toggle('on', on); s.querySelector('span').textContent = text; }
+/* ================= cross-device sync (private GitHub gist) ================= */
+const GH = 'https://api.github.com', SYNC_DESC = 'Ascend sync data', SYNC_FILE = 'ascend.json';
+const cloud = { token: ls.get('ascend:ghtoken', null), gist: ls.get('ascend:gist', null), at: ls.get('ascend:syncAt', 0), state: 'off', busy: false, timer: null, poll: null, err: '' };
+async function gh(path, opts = {}) {
+  const r = await fetch(GH + path, { ...opts, headers: { Accept: 'application/vnd.github+json', Authorization: 'Bearer ' + cloud.token, 'X-GitHub-Api-Version': '2022-11-28', ...(opts.body ? { 'Content-Type': 'application/json' } : {}) }, cache: 'no-store' });
+  if (r.status === 401 || r.status === 403) throw Object.assign(new Error('auth'), { code: 'auth' });
+  if (!r.ok) throw Object.assign(new Error('http ' + r.status), { code: 'http' });
+  return r.status === 204 ? null : r.json();
+}
+function syncPayload() { const c = clone(S); delete c.v; return JSON.stringify({ app: 'ascend', v: 3, savedAt: Date.now(), state: c }); }
+async function findOrCreateGist() {
+  if (cloud.gist) return cloud.gist;
+  for (let page = 1; page <= 5; page++) {
+    const list = await gh(`/gists?per_page=100&page=${page}`);
+    const hit = (list || []).find(g => g.description === SYNC_DESC && g.files && g.files[SYNC_FILE]);
+    if (hit) { cloud.gist = hit.id; break; }
+    if (!list || list.length < 100) break;
+  }
+  if (!cloud.gist) { const g = await gh('/gists', { method: 'POST', body: JSON.stringify({ description: SYNC_DESC, public: false, files: { [SYNC_FILE]: { content: syncPayload() } } }) }); cloud.gist = g.id; }
+  ls.set('ascend:gist', cloud.gist); return cloud.gist;
+}
+async function readRemote() {
+  const g = await gh('/gists/' + cloud.gist), f = g.files && g.files[SYNC_FILE];
+  if (!f) return null;
+  let text = f.content;
+  if (f.truncated && f.raw_url) text = await fetch(f.raw_url, { cache: 'no-store' }).then(r => r.text());
+  try { const j = JSON.parse(text); return j && j.state ? j.state : null; } catch (e) { return null; }
+}
+function mergeGoals(base, other) {
+  const byId = Object.fromEntries((other || []).map(g => [g.id, g]));
+  return (base || []).map(g => { const o = byId[g.id]; if (!o) return g; const done = new Set((o.milestones || []).filter(m => m.done).map(m => m.t));
+    return { ...g, status: g.status === 'done' || o.status === 'done' ? 'done' : g.status, milestones: (g.milestones || []).map(m => ({ ...m, done: m.done || done.has(m.t) })) }; });
+}
+function mergeState(local, remote) {
+  if (!remote) return local;
+  const localNewer = (local.cfgAt || 0) >= (remote.cfgAt || 0), base = localNewer ? local : remote, other = localNewer ? remote : local;
+  const out = normalise({ ...clone(base), days: mergeDays(local.days, remote.days) });
+  out.goals = mergeGoals(base.goals, other.goals);
+  out.settings = { ...out.settings, notify: local.settings ? local.settings.notify : out.settings.notify, lead: local.settings ? local.settings.lead : out.settings.lead };
+  out.cfgAt = Math.max(local.cfgAt || 0, remote.cfgAt || 0);
+  return out;
+}
+const canon = v => Array.isArray(v) ? '[' + v.map(canon).join(',') + ']' : v && typeof v === 'object' ? '{' + Object.keys(v).sort().filter(k => v[k] !== undefined).map(k => JSON.stringify(k) + ':' + canon(v[k])).join(',') + '}' : JSON.stringify(v);
+const sameData = (a, b) => canon({ ...a, dayAt: 0, cfgAt: 0, settings: (a.settings || {}).name, v: 0 }) === canon({ ...b, dayAt: 0, cfgAt: 0, settings: (b.settings || {}).name, v: 0 });
+function setCloud(state, err = '') { cloud.state = state; cloud.err = err; if (route === 'plan') { const el = $('syncStatus'); if (el) el.textContent = cloudLabel(); } const d = $('syncDot'); if (d) d.className = 'syncdot ' + state; }
+function cloudLabel() {
+  if (!cloud.token) return 'Off';
+  if (cloud.state === 'syncing') return 'Syncing…';
+  if (cloud.state === 'error') return cloud.err || 'Could not sync. Will retry.';
+  if (!cloud.at) return 'Connected';
+  const m = Math.round((Date.now() - cloud.at) / 60000);
+  return 'Synced ' + (m < 1 ? 'just now' : m < 60 ? m + ' min ago' : Math.round(m / 60) + ' h ago');
+}
+async function cloudSync(reason) {
+  if (!cloud.token || cloud.busy) return; cloud.busy = true; setCloud('syncing');
+  try {
+    await findOrCreateGist();
+    const remote = await readRemote();
+    const merged = mergeState(S, remote);
+    const changedLocal = !sameData(merged, S);
+    if (changedLocal) { S = merged; ls.set(KEY, S); invalidate(); renderAll(); scheduleNotifications(); }
+    if (!remote || !sameData(merged, remote)) await gh('/gists/' + cloud.gist, { method: 'PATCH', body: JSON.stringify({ files: { [SYNC_FILE]: { content: syncPayload() } } }) });
+    cloud.at = Date.now(); ls.set('ascend:syncAt', cloud.at); setCloud('ok');
+    if (reason === 'connect') toast(remote ? 'Synced. Your progress is now on both devices.' : 'Sync on. Connect your other device with the same key.');
+  } catch (e) {
+    if (e.code === 'auth') { setCloud('error', 'Sync key not accepted. Check it has the gist permission.'); }
+    else setCloud('error', navigator.onLine === false ? 'Offline. Will sync when you are back online.' : 'Could not sync. Will retry.');
+  } finally { cloud.busy = false; }
+}
+function cloudQueue() { if (!cloud.token) return; clearTimeout(cloud.timer); cloud.timer = setTimeout(() => cloudSync('save'), 2500); }
+function cloudStart() { if (!cloud.token) return; clearInterval(cloud.poll); cloud.poll = setInterval(() => { if (!document.hidden) cloudSync('poll'); }, 45000); cloudSync('start'); }
+async function cloudConnect(token) {
+  cloud.token = token.trim(); cloud.gist = null; ls.set('ascend:ghtoken', cloud.token); ls.set('ascend:gist', null);
+  await cloudSync('connect'); if (cloud.state === 'ok') cloudStart(); else { /* keep the key so the user can retry */ }
+  renderPlan(new Date());
+}
+function cloudDisconnect() { clearInterval(cloud.poll); cloud.token = null; cloud.gist = null; cloud.at = 0; ['ascend:ghtoken', 'ascend:gist', 'ascend:syncAt'].forEach(k => { try { localStorage.removeItem(k); } catch (e) {} }); setCloud('off'); renderPlan(new Date()); toast('Sync off on this device'); }
+window.addEventListener('online', () => cloudSync('online'));
+
 async function connectClaude() {
   try {
     if (!window.claude || !window.claude.use) return;
@@ -1022,7 +1110,7 @@ function renderPlan(now) {
   const notifState = !S.settings.notify ? 'Off' : !('Notification' in window) ? 'In-app only' : Notification.permission === 'granted' ? 'On · with sound' : Notification.permission === 'denied' ? 'In-app only · notifications blocked in browser' : 'In-app only · tap to allow notifications';
   $('planWrap').innerHTML = `
   ${futureP ? `<div class="banner"><b>${esc(futureP.name)}</b> starts ${fmtD(futureP.start, { weekday: 'short', day: 'numeric', month: 'short' })}. ${S.templates.some(t => t.from === futureP.start) ? 'Update its Uni blocks with your timetable.' : 'Create a new plan version for it.'}</div>` : ''}
-  <div class="grid">
+  <div class="grid plangrid">
     <div class="card">
       <h2>Weekly plan</h2>
       <div class="formrow" style="margin-top:0"><div><label class="f" for="tplSel">Plan version (active from)</label><select id="tplSel">${S.templates.map(t => `<option value="${t.from}"${t.from === planTpl ? ' selected' : ''}>From ${fmtD(t.from, { day: 'numeric', month: 'short', year: 'numeric' })}${t === act ? ' · active now' : t.from > today ? ' · upcoming' : ' · past'}</option>`).join('')}</select></div></div>
@@ -1043,6 +1131,10 @@ function renderPlan(now) {
         ${T && S.templates.length > 1 ? `<button class="danger sm" style="margin-top:10px" data-act="delTpl">Delete this version</button>` : ''}</details>
     </div>
     <div>
+      <div class="card"><div class="sw"><div><h2 style="margin:0">Sync</h2><div class="muted small" id="syncStatus">${cloudLabel()}</div></div>${cloud.token ? `<button class="ghost sm" data-act="syncNow">Sync now</button>` : ''}</div>
+        ${cloud.token ? `<button class="ghost sm" style="margin-top:12px" data-act="syncOff">Turn off on this device</button>` : `
+        <ol class="steps"><li><a href="https://github.com/settings/tokens/new?scopes=gist&description=Ascend%20sync" target="_blank" rel="noopener">Create a sync key on GitHub</a> <span class="muted">(keep only “gist” ticked, set no expiry, then Generate)</span></li><li>Paste it here. Use the same key on your other device.</li></ol>
+        <div class="addms"><input id="syncKey" type="password" autocomplete="off" placeholder="Paste sync key" aria-label="Sync key"><button class="sm" data-act="syncOn">Connect</button></div>`}</div>
       <div class="card"><div class="sw"><div><h2 style="margin:0">Reminders</h2><div class="muted small">${notifState}</div></div><button class="toggle" data-act="notifToggle" aria-pressed="${!!S.settings.notify}" aria-label="Reminders"></button></div>
         ${S.settings.notify ? `<div class="formrow"><div><label class="f" for="lead">Remind me</label><select id="lead">${[0, 2, 5, 10, 15].map(v => `<option value="${v}"${+S.settings.lead === v ? ' selected' : ''}>${v ? v + ' min before' : 'At the start'}</option>`).join('')}</select></div></div>` : ''}</div>
       <div class="card set">
@@ -1151,6 +1243,9 @@ document.addEventListener('click', async ev => {
     case 'addArea': { let k = 'a' + Date.now().toString(36); S.areas[k] = { name: 'New area', color: '#7fb3ff', prompt: '' }; save(); renderPlan(now); break; }
     case 'addMin': S.minimum.push('New item'); (S.minLinks ||= []).push(null); save(); renderAll(); break;
     case 'delMin': S.minimum.splice(+b.dataset.i, 1); (S.minLinks || []).splice(+b.dataset.i, 1); save(); renderAll(); break;
+    case 'syncOn': { const k = ($('syncKey').value || '').trim(); if (k.length < 20) { toast('Paste the full sync key'); break; } b.disabled = true; await cloudConnect(k); break; }
+    case 'syncNow': await cloudSync('manual'); toast(cloud.state === 'ok' ? 'Synced' : cloudLabel()); break;
+    case 'syncOff': cloudDisconnect(); break;
     case 'notifToggle': {
       unlockAudio();
       if (S.settings.notify) { S.settings.notify = false; save(); scheduleNotifications(); renderPlan(now); toast('Reminders off'); break; }
@@ -1236,7 +1331,7 @@ const loop = setInterval(() => {
   if (now.getMinutes() !== lastMin) { lastMin = now.getMinutes(); renderTop(now); if (route === 'today') renderList(now); }
   if (iso(now) !== lastDay) { lastDay = iso(now); viewOffset = 0; invalidate(); scheduleNotifications(); renderAll(); }
 }, 1000);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) { invalidate(); armTimerEnd(); if (timer && timer.running) keepAwake(true); scheduleNotifications(); renderAll(); } });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { if (cloud.token) cloudSync('focus'); invalidate(); armTimerEnd(); if (timer && timer.running) keepAwake(true); scheduleNotifications(); renderAll(); } });
 window.addEventListener('storage', e => { if (e.key === KEY) { S = normalise(ls.get(KEY, null)); invalidate(); renderAll(); } if (e.key === 'focusapp:timer') { timer = ls.get('focusapp:timer', null); armTimerEnd(); renderAll(); } });
 
 function handleStartLink(di, key) { if (!di || !key) return; if (timer) { toast('A focus session is already running'); return; } startTimer(di, key); }
@@ -1247,7 +1342,7 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   navigator.serviceWorker.ready.then(r => { swReg = r; }).catch(() => {});
 }
 if (timer && timer.running && tElapsed() >= timer.len * 60) finishTimer(false);
-armTimerEnd(); if (timer && timer.running) keepAwake(true); go(); scheduleNotifications(); connectClaude();
+armTimerEnd(); if (timer && timer.running) keepAwake(true); go(); scheduleNotifications(); connectClaude(); cloudStart();
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
 }
 </script>
